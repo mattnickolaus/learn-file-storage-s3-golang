@@ -3,7 +3,11 @@ package main
 import (
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -31,22 +35,24 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
-
 	const maxMemory = 10 << 20
 	r.ParseMultipartForm(maxMemory)
 
-	file, header, err := r.FormFile("thumbnail")
+	imageFile, header, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable parse form file", err)
 		return
 	}
-	defer file.Close()
 
-	mediaType := header.Header.Get("Content-Type")
-	imageData, err := io.ReadAll(file)
+	contentType := header.Header.Get("Content-Type")
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	// ignoring the map to the original mediatype formatting (if it contained spaces or caps)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to read image data", err)
+		respondWithError(w, http.StatusBadRequest, "Unable to parse mediaType from request header", err)
+		return
+	}
+	if (mediaType != "image/jpeg") && (mediaType != "image/png") {
+		respondWithError(w, http.StatusBadRequest, "Invalid Media type, expects png or jpeg", nil)
 		return
 	}
 
@@ -61,9 +67,25 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	videoThumbnails[videoMetaData.ID] = thumbnail{mediaType: mediaType, data: imageData}
+	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
-	thumbnailURL := fmt.Sprintf("http://localhost:%v/api/thumbnails/%v", cfg.port, videoMetaData.ID)
+	fileExtension := strings.Replace(mediaType, "image/", "", 1)
+	fullFileName := fmt.Sprintf("%s.%s", videoMetaData.ID.String(), fileExtension)
+	ImageFilePath := filepath.Join(cfg.assetsRoot, fullFileName)
+
+	fileReference, err := os.Create(ImageFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error writing the image file", err)
+		return
+	}
+	_, err = io.Copy(fileReference, imageFile)
+	// ignoring the returned amount of bytes copied
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error writing the image file", err)
+		return
+	}
+
+	thumbnailURL := fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, fullFileName)
 
 	videoParam := database.CreateVideoParams{
 		Title:       videoMetaData.Title,
