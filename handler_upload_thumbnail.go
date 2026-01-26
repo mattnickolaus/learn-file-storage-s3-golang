@@ -110,6 +110,10 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		CreateVideoParams: videoParam,
 	}
 	err = cfg.db.UpdateVideo(updatedVideo)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to update the video with new thumbnail url in database", err)
+		return
+	}
 
 	respondWithJSON(w, http.StatusOK, updatedVideo)
 }
