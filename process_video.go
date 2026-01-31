@@ -129,3 +129,16 @@ func getVideoAspectRatio(filePath string) (string, error) {
 func isWithinRange(value, min, max float64) bool {
 	return value >= min && value <= max
 }
+
+func processVideoForFastStart(filePath string) (string, error) {
+	outputFilePath := fmt.Sprintf("%s.processing", filePath)
+
+	ffmpegCmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outputFilePath)
+
+	err := ffmpegCmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return outputFilePath, nil
+}

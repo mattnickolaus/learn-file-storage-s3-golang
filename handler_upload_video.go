@@ -100,6 +100,19 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		ratioPrefix = "other"
 	}
 
+	fastStartFile, err := processVideoForFastStart(fileReference.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to process Video For Fast Start", err)
+		return
+	}
+	fastStartFileReference, err := os.Open(fastStartFile)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to open Fast Start output video", err)
+		return
+	}
+	defer os.Remove(fastStartFileReference.Name())
+	defer fastStartFileReference.Close()
+
 	videoFileExtension := strings.Replace(mediaType, "video/", "", 1)
 	randomName := make([]byte, 32)
 	rand.Read(randomName)
@@ -110,7 +123,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	putParams := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &fullFileName,
-		Body:        fileReference,
+		Body:        fastStartFileReference,
 		ContentType: &mediaType,
 	}
 	_, err = cfg.s3Client.PutObject(r.Context(), &putParams)
